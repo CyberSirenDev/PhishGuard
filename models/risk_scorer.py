@@ -20,12 +20,32 @@ def load_model():
     if os.path.exists(MODEL_PATH):
         with open(MODEL_PATH, 'rb') as f:
             return pickle.load(f)
+    # Auto-train on first run (e.g. fresh cloud deployment)
+    print("[PhishGuard] model.pkl not found — training RF model now...")
+    try:
+        from models.train_real_world import train_on_real_data
+        train_on_real_data()
+        if os.path.exists(MODEL_PATH):
+            with open(MODEL_PATH, 'rb') as f:
+                return pickle.load(f)
+    except Exception as e:
+        print(f"[PhishGuard] Auto-train failed: {e}")
     return None
 
 def load_nlp_model():
     if os.path.exists(NLP_MODEL_PATH):
         with open(NLP_MODEL_PATH, 'rb') as f:
             return pickle.load(f)
+    # Auto-train on first run
+    print("[PhishGuard] nlp_model.pkl not found — training NLP model now...")
+    try:
+        from models.train_nlp import train_nlp_model
+        train_nlp_model()
+        if os.path.exists(NLP_MODEL_PATH):
+            with open(NLP_MODEL_PATH, 'rb') as f:
+                return pickle.load(f)
+    except Exception as e:
+        print(f"[PhishGuard] NLP auto-train failed: {e}")
     return None
 
 def calculate_risk_score(url, email_text="", eml_data=None):

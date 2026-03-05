@@ -116,11 +116,19 @@ def analyze():
         # Save a report if requested
         generate_pdf_flag = generate_pdf
         if generate_pdf_flag:
-            import os, uuid
+            import os, uuid, tempfile
             from models.pdf_generator import ThreatReportGenerator
-            report_id  = str(uuid.uuid4())
-            report_path = os.path.join(os.path.dirname(__file__),
-                                       f"reports/phishguard_report_{report_id}.pdf")
+            report_id   = str(uuid.uuid4())
+            # Use /tmp on cloud (read-only app dir), local reports/ otherwise
+            reports_dir = tempfile.gettempdir()
+            local_dir   = os.path.join(os.path.dirname(__file__), 'reports')
+            if os.path.exists(local_dir) or not os.access(os.path.dirname(__file__), os.W_OK):
+                try:
+                    os.makedirs(local_dir, exist_ok=True)
+                    reports_dir = local_dir
+                except OSError:
+                    pass  # Fall back to /tmp
+            report_path = os.path.join(reports_dir, f"phishguard_report_{report_id}.pdf")
             generator = ThreatReportGenerator(report_path)
             pdf_data  = result.copy()
             pdf_data['url'] = url if url else "Email Content Analysis Only"
@@ -137,10 +145,14 @@ from flask import send_file
 
 @app.route('/download/<report_id>')
 def download_report(report_id):
-    import os
-    report_path = os.path.join(os.path.dirname(__file__), f"reports/phishguard_report_{report_id}.pdf")
-    if os.path.exists(report_path):
-        return send_file(report_path, as_attachment=True)
+    import os, tempfile
+    # Check both local reports/ and /tmp
+    local_path = os.path.join(os.path.dirname(__file__), f"reports/phishguard_report_{report_id}.pdf")
+    tmp_path   = os.path.join(tempfile.gettempdir(), f"phishguard_report_{report_id}.pdf")
+    path = local_path if os.path.exists(local_path) else tmp_path
+    if os.path.exists(path):
+        return send_file(path, as_attachment=True,
+                         download_name=f'phishguard_{report_id[:8]}.pdf')
     return "Report not found.", 404
 
 @app.route('/bulk-analyze', methods=['POST'])
