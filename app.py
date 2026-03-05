@@ -1,5 +1,12 @@
 from flask import Flask, request, jsonify, render_template
 
+# Load .env file for local development (no effect on Railway/Render)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 app = Flask(__name__)
 
 @app.route('/')
