@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhishGuard</title>
+    <meta name="description" content="AI-powered phishing and URL threat detection.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+    <div class="layout">
+
+        <!-- Header -->
+        <header class="header">
+            <div class="brand">
+                <div class="brand-mark">PG</div>
+                <span class="brand-name">PhishGuard</span>
+            </div>
+            <nav class="tab-nav">
+                <button class="tab active" id="tabSingle" onclick="switchTab('single')">Single Scan</button>
+                <button class="tab" id="tabBulk" onclick="switchTab('bulk')">Bulk Scanner</button>
+            </nav>
+            <div class="header-right">
+                <span class="status-dot"></span>
+                <span class="status-text">Online</span>
+            </div>
+        </header>
+
+        <!-- ── Single Scan ── -->
+        <main id="panelSingle" class="panel">
+
+            <!-- Input -->
+            <section id="inputSection">
+                <div class="section-label">Target URL</div>
+                <form id="scanForm" class="scan-form">
+                    <input type="text" id="url" placeholder="https://example.com" autocomplete="off" spellcheck="false">
+
+                    <div class="row-options">
+                        <label class="upload-btn" for="eml_file">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                            </svg>
+                            <span id="emlLabel">Attach .eml</span>
+                            <input type="file" id="eml_file" accept=".eml" style="display:none">
+                        </label>
+                        <label class="check-label">
+                            <input type="checkbox" id="generate_pdf">
+                            <span class="check-box"></span>
+                            PDF Report
+                        </label>
+                    </div>
+
+                    <button type="submit" id="analyzeBtn" class="btn-run">
+                        <span class="btn-text">Analyze</span>
+                        <span class="spinner hidden"></span>
+                    </button>
+                </form>
+            </section>
+
+            <!-- Results -->
+            <section id="resultSection" class="hidden">
+
+                <!-- Score row -->
+                <div class="result-top">
+                    <div class="score-wrap">
+                        <svg class="ring" viewBox="0 0 80 80">
+                            <circle class="ring-track" cx="40" cy="40" r="34" />
+                            <circle id="ringFill" class="ring-fill" cx="40" cy="40" r="34" stroke-dasharray="213.6"
+                                stroke-dashoffset="213.6" />
+                        </svg>
+                        <span id="riskScore" class="score-num">0</span>
+                    </div>
+
+                    <div class="result-info">
+                        <div id="verdictBadge" class="verdict">—</div>
+                        <p id="resultUrl" class="result-url"></p>
+                        <ul id="insightsList" class="insights"></ul>
+                    </div>
+
+                    <div class="result-ctrls">
+                        <button id="newScanBtn" class="btn-ghost">← New</button>
+                        <div id="pdfBtnSlot"></div>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Feature tags -->
+                <div class="section-label">Extracted Features</div>
+                <div id="featureTags" class="tags"></div>
+
+                <!-- WHOIS -->
+                <div id="whoisPanel" class="hidden">
+                    <div class="divider"></div>
+                    <div class="section-label">WHOIS</div>
+                    <div id="whoisGrid" class="whois-grid"></div>
+                    <div id="whoisBanner" class="whois-banner"></div>
+                </div>
+
+                <!-- SSL -->
+                <div id="sslPanel" class="hidden">
+                    <div class="divider"></div>
+                    <div class="section-label">SSL Certificate</div>
+                    <div id="sslGrid" class="whois-grid"></div>
+                    <div id="sslBanner" class="whois-banner"></div>
+                </div>
+
+                <!-- Redirect Chain -->
+                <div id="redirectPanel" class="hidden">
+                    <div class="divider"></div>
+                    <div class="section-label">Redirect Chain</div>
+                    <div id="redirectSummary" class="whois-banner" style="margin-bottom:0.75rem;"></div>
+                    <div id="redirectChain" class="redirect-chain"></div>
+                </div>
+
+                <!-- Threat Intel -->
+                <div id="intelPanel" class="hidden">
+                    <div class="divider"></div>
+                    <div class="section-label">Threat Intelligence</div>
+                    <div id="intelGrid" class="intel-grid"></div>
+                </div>
+
+                <!-- Screenshot -->
+                <div id="screenshotPanel" class="hidden">
+                    <div class="divider"></div>
+                    <div class="section-label">urlscan.io Preview <span class="muted">(loads in ~35s)</span></div>
+                    <img id="screenshotImg" src="" alt="Safe screenshot" class="screenshot">
+                    <a id="screenshotLink" href="#" target="_blank" class="inline-link">View full report →</a>
+                </div>
+
+            </section>
+        </main>
+
+        <!-- ── Bulk Scanner ── -->
+        <main id="panelBulk" class="panel hidden">
+
+            <div class="section-label">URLs to scan</div>
+            <form id="bulkForm">
+                <textarea id="bulkUrls"
+                    placeholder="https://example.com&#10;http://suspicious-site.net&#10;https://google.com"></textarea>
+
+                <label class="upload-btn" for="bulkFile" style="margin-top:0.75rem; display:inline-flex;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    <span id="bulkFileLabel">Upload .txt / .csv</span>
+                    <input type="file" id="bulkFile" accept=".txt,.csv" style="display:none">
+                </label>
+
+                <button type="submit" id="bulkBtn" class="btn-run" style="margin-top:1rem;">
+                    <span id="bulkBtnText">Run Bulk Scan</span>
+                    <span id="bulkSpinner" class="spinner hidden"></span>
+                </button>
+            </form>
+
+            <!-- Bulk results -->
+            <div id="bulkResultsSection" class="hidden">
+                <div class="divider"></div>
+                <div class="bulk-summary" id="bulkSummary"></div>
+                <div class="divider"></div>
+                <div class="table-head-row">
+                    <div class="section-label" style="margin:0">Results</div>
+                    <button id="bulkExportBtn" class="btn-ghost">Export CSV</button>
+                </div>
+                <div class="table-wrap">
+                    <table id="bulkTable">
+                        <thead>
+                            <tr>
+                                <th data-col="url">URL</th>
+                                <th data-col="risk_score">Score</th>
+                                <th data-col="verdict">Verdict</th>
+                                <th>HTTPS</th>
+                                <th data-col="suspicious_keywords">Keywords</th>
+                                <th data-col="domain_entropy">Entropy</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bulkTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">PhishGuard · AI-Powered Threat Detection · 2025</footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>

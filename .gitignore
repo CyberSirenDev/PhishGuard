@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Environment variables / API keys — NEVER commit these
+.env
+*.env
+
+# Model artifacts (large binary files)
+models/model.pkl
+models/nlp_model.pkl
+
+# Generated reports and temp files
+reports/
+tmp/
+*.pdf
+test_*.pdf
+test_*.json
+out*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Flask session files
+flask_session/

@@ -1,0 +1,424 @@
+import os
+import io
+from datetime import datetime
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+    Image as RLImage, HRFlowable, KeepTogether
+)
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+
+# ── Palette ────────────────────────────────────────────────────────────────────
+C_ACCENT  = colors.HexColor('#6366f1')
+C_BG      = colors.HexColor('#111111')
+C_SURFACE = colors.HexColor('#1a1a1a')
+C_BORDER  = colors.HexColor('#2e2e2e')
+C_RED     = colors.HexColor('#ef4444')
+C_YELLOW  = colors.HexColor('#eab308')
+C_GREEN   = colors.HexColor('#22c55e')
+C_TEXT_1  = colors.HexColor('#f0f0f0')
+C_TEXT_2  = colors.HexColor('#888888')
+C_WHITE   = colors.white
+
+
+class ThreatReportGenerator:
+
+    def __init__(self, filename):
+        self.filename = filename
+        self.doc = SimpleDocTemplate(
+            self.filename,
+            pagesize=letter,
+            rightMargin=0.75 * inch,
+            leftMargin=0.75 * inch,
+            topMargin=0.75 * inch,
+            bottomMargin=0.65 * inch
+        )
+        self._build_styles()
+
+    # ── Styles ─────────────────────────────────────────────────────────────────
+    def _build_styles(self):
+        base = getSampleStyleSheet()
+
+        def s(name, parent='Normal', **kw):
+            p = ParagraphStyle(name, parent=base[parent], **kw)
+            return p
+
+        self.styles = {
+            'title':   s('Title2', 'Heading1', fontSize=22, textColor=C_TEXT_1,
+                          alignment=TA_CENTER, spaceAfter=4, fontName='Helvetica-Bold'),
+            'sub':     s('Sub',    fontSize=9,  textColor=C_TEXT_2,
+                          alignment=TA_CENTER, spaceAfter=16),
+            'h2':      s('H2',     'Heading2', fontSize=12, textColor=C_ACCENT,
+                          spaceBefore=14, spaceAfter=6, fontName='Helvetica-Bold',
+                          borderPadding=(0, 0, 3, 0)),
+            'body':    s('Body2',  fontSize=9,  textColor=C_TEXT_1,
+                          spaceAfter=4, leading=14),
+            'muted':   s('Muted',  fontSize=8,  textColor=C_TEXT_2,
+                          spaceAfter=3, leading=12),
+            'danger':  s('Danger', fontSize=10, textColor=C_RED,
+                          fontName='Helvetica-Bold', spaceAfter=6),
+            'safe':    s('Safe',   fontSize=10, textColor=C_GREEN,
+                          fontName='Helvetica-Bold', spaceAfter=6),
+            'suspicious': s('Suspicious', fontSize=10, textColor=C_YELLOW,
+                             fontName='Helvetica-Bold', spaceAfter=6),
+            'bullet':  s('Bullet', fontSize=9, textColor=C_TEXT_1,
+                          leftIndent=12, spaceAfter=3, leading=13),
+        }
+
+    # ── Helpers ────────────────────────────────────────────────────────────────
+    def _hr(self):
+        return HRFlowable(width='100%', thickness=1, color=C_BORDER, spaceAfter=8, spaceBefore=4)
+
+    def _chart_image(self, png_bytes, width_in=2.8):
+        buf = io.BytesIO(png_bytes)
+        img = RLImage(buf)
+        aspect = img.imageHeight / float(img.imageWidth)
+        img.drawWidth  = width_in * inch
+        img.drawHeight = width_in * aspect * inch
+        return img
+
+    def _verdict_style(self, score):
+        if score >= 70: return self.styles['danger'],    'PHISHING DETECTED'
+        if score >= 40: return self.styles['suspicious'], 'SUSPICIOUS'
+        return self.styles['safe'], 'LEGITIMATE — LOW RISK'
+
+    # ── Page background ────────────────────────────────────────────────────────
+    def _draw_background(self, canvas, doc):
+        """Full-page dark background + header bar."""
+        w, h = letter
+        canvas.saveState()
+
+        # Page fill
+        canvas.setFillColor(C_BG)
+        canvas.rect(0, 0, w, h, fill=True, stroke=False)
+
+        # Header bar
+        canvas.setFillColor(C_SURFACE)
+        canvas.rect(0, h - 54, w, 54, fill=True, stroke=False)
+
+        # Accent left strip
+        canvas.setFillColor(C_ACCENT)
+        canvas.rect(0, h - 54, 4, 54, fill=True, stroke=False)
+
+        # Brand name
+        canvas.setFont('Helvetica-Bold', 13)
+        canvas.setFillColor(C_TEXT_1)
+        canvas.drawString(0.85 * inch, h - 34, 'PhishGuard')
+
+        canvas.setFont('Helvetica', 8)
+        canvas.setFillColor(C_TEXT_2)
+        canvas.drawString(0.85 * inch, h - 46, 'AI Threat Intelligence Platform')
+
+        # Timestamp top-right
+        ts = datetime.now().strftime('%Y-%m-%d  %H:%M UTC')
+        canvas.setFont('Helvetica', 7.5)
+        canvas.setFillColor(C_TEXT_2)
+        canvas.drawRightString(w - 0.75 * inch, h - 39, ts)
+
+        # Footer
+        canvas.setFont('Helvetica', 7)
+        canvas.setFillColor(C_TEXT_2)
+        canvas.drawString(0.75 * inch, 0.4 * inch,
+                          'Generated by PhishGuard · AI-Powered Phishing Detection · Confidential')
+        canvas.drawRightString(w - 0.75 * inch, 0.4 * inch, f'Page {doc.page}')
+
+        canvas.restoreState()
+
+    # ── Main build ─────────────────────────────────────────────────────────────
+    def generate_report(self, data):
+        from models.chart_generator import (
+            generate_gauge_chart, generate_radar_chart, generate_bar_chart
+        )
+
+        score   = float(data.get('risk_score', 0))
+        url     = data.get('url', 'N/A')
+        details = data.get('details', [])
+        feats   = data.get('features', {})
+        whois   = data.get('whois_data', {})
+        ssl     = data.get('ssl_data', {})
+        intel   = data.get('threat_intel', {})
+        redir   = data.get('redirect_data', {})
+
+        elems = []
+
+        # ── Section: Title ─────────────────────────────────────────────────────
+        elems.append(Spacer(1, 0.55 * inch))  # push below header bar
+        elems.append(Paragraph('Threat Intelligence Report', self.styles['title']))
+        elems.append(Paragraph(
+            f'Analyzed Target: <b>{url}</b>', self.styles['sub']))
+        elems.append(self._hr())
+
+        # ── Section: Verdict + Charts (side by side) ───────────────────────────
+        verdict_style, verdict_text = self._verdict_style(score)
+        elems.append(Paragraph('1 · Risk Assessment', self.styles['h2']))
+
+        gauge_img = self._chart_image(generate_gauge_chart(score), width_in=2.6)
+
+        # Left column: verdict text  | Right column: gauge
+        verdict_cell = [
+            [Paragraph(f'<b>Risk Score:</b> {score} / 100', self.styles['body'])],
+            [Paragraph(verdict_text, verdict_style)],
+            [Spacer(1, 6)],
+        ]
+        if details:
+            verdict_cell.append(
+                [Paragraph('<b>Key Findings:</b>', self.styles['body'])])
+            for d in details:
+                verdict_cell.append(
+                    [Paragraph(f'• {d}', self.styles['bullet'])])
+
+        left_table  = Table(verdict_cell, colWidths=[3.6 * inch])
+        left_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BACKGROUND', (0, 0), (-1, -1), C_BG),
+        ]))
+
+        side_by_side = Table(
+            [[left_table, gauge_img]],
+            colWidths=[3.9 * inch, 2.8 * inch]
+        )
+        side_by_side.setStyle(TableStyle([
+            ('VALIGN',    (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING',  (1, 0), (1, 0), 12),
+        ]))
+        elems.append(side_by_side)
+        elems.append(self._hr())
+
+        # ── Section: Telemetry Charts ──────────────────────────────────────────
+        elems.append(Paragraph('2 · Telemetry Visuals', self.styles['h2']))
+        elems.append(Paragraph(
+            'The radar chart shows six normalised risk dimensions (0–1 scale). '
+            'The bar chart shows raw extracted feature values.',
+            self.styles['muted']))
+        elems.append(Spacer(1, 6))
+
+        if feats:
+            radar_img = self._chart_image(generate_radar_chart(feats), width_in=2.9)
+            bar_img   = self._chart_image(generate_bar_chart(feats),   width_in=3.5)
+
+            charts_table = Table(
+                [[radar_img, bar_img]],
+                colWidths=[3.1 * inch, 3.7 * inch]
+            )
+            charts_table.setStyle(TableStyle([
+                ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING',  (1, 0), (1, 0), 14),
+            ]))
+            elems.append(charts_table)
+        else:
+            elems.append(Paragraph('No feature data available.', self.styles['muted']))
+
+        elems.append(self._hr())
+
+        # ── Section: Extracted Telemetry Table ────────────────────────────────
+        elems.append(Paragraph('3 · Extracted Feature Telemetry', self.styles['h2']))
+
+        bool_keys = {'has_ip_in_domain', 'is_https', 'has_dns_a_record',
+                     'has_dns_mx_record', 'has_html'}
+
+        def fmt(k, v):
+            if k in bool_keys:
+                return 'Yes' if v == 1 else 'No'
+            if isinstance(v, float):
+                return f'{v:.3f}'
+            return str(v)
+
+        rows = [['Feature', 'Value']]
+        for k, v in feats.items():
+            rows.append([k.replace('_', ' ').title(), fmt(k, v)])
+
+        if len(rows) > 1:
+            tbl = Table(rows, colWidths=[3.3 * inch, 3.3 * inch])
+            tbl.setStyle(TableStyle([
+                # Header
+                ('BACKGROUND',  (0, 0), (-1, 0), C_ACCENT),
+                ('TEXTCOLOR',   (0, 0), (-1, 0), C_WHITE),
+                ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE',    (0, 0), (-1, 0), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('TOPPADDING',    (0, 0), (-1, 0), 8),
+                # Body rows
+                ('FONTNAME',    (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE',    (0, 1), (-1, -1), 8.5),
+                ('TEXTCOLOR',   (0, 1), (-1, -1), C_TEXT_1),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_SURFACE, C_BG]),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
+                ('TOPPADDING',    (0, 1), (-1, -1), 5),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+                ('GRID',        (0, 0), (-1, -1), 0.4, C_BORDER),
+                ('VALIGN',      (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            elems.append(tbl)
+
+        elems.append(self._hr())
+
+        # ── Section: WHOIS ─────────────────────────────────────────────────────
+        if whois and whois.get('available'):
+            elems.append(Paragraph('4 · WHOIS Domain Intelligence', self.styles['h2']))
+            w_rows = [['Field', 'Value']]
+            for k, v in [
+                ('Domain',     whois.get('domain')),
+                ('Registrar',  whois.get('registrar')),
+                ('Country',    whois.get('registrant_country')),
+                ('Created',    whois.get('creation_date')),
+                ('Expires',    whois.get('expiry_date')),
+                ('Age (days)', whois.get('age_days')),
+                ('Risk',       whois.get('age_risk_label', '').replace('\U0001f7e2', '').replace('\U0001f534', '').strip()),
+            ]:
+                w_rows.append([str(k), str(v or '—')])
+            wtbl = Table(w_rows, colWidths=[2 * inch, 4.6 * inch])
+            wtbl.setStyle(TableStyle([
+                ('BACKGROUND',  (0, 0), (-1, 0), C_ACCENT),
+                ('TEXTCOLOR',   (0, 0), (-1, 0), C_WHITE),
+                ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE',    (0, 0), (-1, -1), 8.5),
+                ('TEXTCOLOR',   (0, 1), (-1, -1), C_TEXT_1),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_SURFACE, C_BG]),
+                ('GRID',        (0, 0), (-1, -1), 0.4, C_BORDER),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ('TOPPADDING',    (0, 0), (-1, -1), 5),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+            ]))
+            elems.append(wtbl)
+            elems.append(self._hr())
+
+        # ── Section: SSL ───────────────────────────────────────────────────────
+        if ssl and ssl.get('available'):
+            elems.append(Paragraph('5 · SSL / TLS Certificate', self.styles['h2']))
+            ssl_rows = [['Field', 'Value'], ]
+            for k, v in [
+                ('Issuer',          ssl.get('issuer')),
+                ('Expires On',      ssl.get('expires_on')),
+                ('Validity Period', f"{ssl.get('validity_days', '?')} days"),
+                ('Cert Age',        f"{ssl.get('age_days', '?')} days"),
+                ('Free CA',         'Yes' if ssl.get('is_free_ca') else 'No'),
+                ('Risk Penalty',    f"+{ssl.get('risk_score_penalty', 0)} pts"),
+            ]:
+                ssl_rows.append([str(k), str(v or '—')])
+            ssltbl = Table(ssl_rows, colWidths=[2 * inch, 4.6 * inch])
+            ssltbl.setStyle(TableStyle([
+                ('BACKGROUND',  (0, 0), (-1, 0), C_ACCENT),
+                ('TEXTCOLOR',   (0, 0), (-1, 0), C_WHITE),
+                ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE',    (0, 0), (-1, -1), 8.5),
+                ('TEXTCOLOR',   (0, 1), (-1, -1), C_TEXT_1),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_SURFACE, C_BG]),
+                ('GRID',        (0, 0), (-1, -1), 0.4, C_BORDER),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ('TOPPADDING',    (0, 0), (-1, -1), 5),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+            ]))
+            elems.append(ssltbl)
+            if ssl.get('risk_flags'):
+                for flag in ssl['risk_flags']:
+                    elems.append(Paragraph(f'⚠ {flag}', self.styles['bullet']))
+            elems.append(self._hr())
+
+        # ── Section: Redirect Chain ────────────────────────────────────────────
+        if redir and redir.get('available') and redir.get('hop_count', 0) > 1:
+            elems.append(Paragraph('6 · Redirect Chain', self.styles['h2']))
+            elems.append(Paragraph(
+                f"Total hops: {redir['hop_count']} · "
+                f"Domain changed: {'Yes' if redir.get('domain_changed') else 'No'} · "
+                f"Final URL: {redir.get('final_url', '—')}",
+                self.styles['muted']))
+            r_rows = [['#', 'URL', 'Status', 'Domain Changed']]
+            for hop in redir.get('chain', []):
+                r_rows.append([
+                    str(hop.get('hop', '')),
+                    hop.get('url', '')[:70],
+                    str(hop.get('status', '')),
+                    'Yes' if hop.get('domain_changed') else 'No',
+                ])
+            rtbl = Table(r_rows, colWidths=[0.3 * inch, 4.0 * inch, 0.8 * inch, 1.3 * inch])
+            rtbl.setStyle(TableStyle([
+                ('BACKGROUND',  (0, 0), (-1, 0), C_ACCENT),
+                ('TEXTCOLOR',   (0, 0), (-1, 0), C_WHITE),
+                ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE',    (0, 0), (-1, -1), 7.5),
+                ('TEXTCOLOR',   (0, 1), (-1, -1), C_TEXT_1),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [C_SURFACE, C_BG]),
+                ('GRID',        (0, 0), (-1, -1), 0.4, C_BORDER),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                ('TOPPADDING',    (0, 0), (-1, -1), 5),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 6),
+                ('WORDWRAP',    (1, 1), (1, -1), 1),
+            ]))
+            elems.append(rtbl)
+            elems.append(self._hr())
+
+        # ── Footer note ────────────────────────────────────────────────────────
+        elems.append(Spacer(1, 16))
+        elems.append(Paragraph(
+            '<i>This report was automatically generated by the PhishGuard AI Threat Engine. '
+            'Results are advisory only and should be reviewed by a security professional.</i>',
+            self.styles['muted']))
+
+        self.doc.build(
+            elems,
+            onFirstPage=self._draw_background,
+            onLaterPages=self._draw_background
+        )
+        return self.filename
+
+
+if __name__ == '__main__':
+    test_data = {
+        'url': 'http://paypal-secure-login.account-update.info/verify?id=12345',
+        'risk_score': 95.0,
+        'details': [
+            'NLP Model flagged email content as highly suspicious (Confidence: 98.0%).',
+            'Found 4 suspicious keywords in URL.',
+            'Certificate issued by a free/automated CA: Let\'s Encrypt',
+            'Certificate is extremely new (3 days old)',
+            'URL redirects across domains.',
+        ],
+        'features': {
+            'url_length': 62, 'domain_length': 38,
+            'url_entropy': 4.81, 'domain_entropy': 3.95,
+            'num_dots': 4, 'num_hyphens': 3, 'num_at_symbols': 0,
+            'num_queries': 1, 'num_ampersands': 0, 'num_equals': 1,
+            'num_subdomains': 2, 'has_ip_in_domain': 0, 'is_https': 0,
+            'suspicious_keyword_count': 4, 'domain_age_days': 3,
+            'has_dns_a_record': 1, 'has_dns_mx_record': 0,
+            'urgency_score': 3, 'financial_score': 1, 'num_links': 0, 'has_html': 0,
+        },
+        'whois_data': {
+            'available': True, 'domain': 'account-update.info',
+            'registrar': 'NameCheap', 'registrant_country': 'US',
+            'creation_date': '2026-03-02', 'expiry_date': '2027-03-02',
+            'age_days': 3, 'age_risk': 'high',
+            'age_risk_label': '🔴 Very New Domain — High Risk'
+        },
+        'ssl_data': {
+            'available': True, 'issuer': "Let's Encrypt",
+            'expires_on': '2026-06-01', 'validity_days': 90,
+            'age_days': 3, 'is_free_ca': True,
+            'risk_score_penalty': 35,
+            'risk_flags': [
+                "Certificate issued by a free/automated CA: Let's Encrypt",
+                'Certificate is extremely new (3 days old)',
+                'Short-lived certificate (90 days valid)'
+            ]
+        },
+        'redirect_data': {
+            'available': True, 'hop_count': 3,
+            'final_url': 'http://evil-harvest.ru/steal',
+            'domain_changed': True,
+            'risk_score_penalty': 25,
+            'risk_flags': ['URL redirects across domains.', 'Long chain (3 hops).'],
+            'chain': [
+                {'hop': 1, 'url': 'http://bit.ly/xyz123', 'status': 301, 'domain_changed': False, 'note': ''},
+                {'hop': 2, 'url': 'http://paypal-secure.org/track', 'status': 302, 'domain_changed': True, 'note': ''},
+                {'hop': 3, 'url': 'http://evil-harvest.ru/steal', 'status': 200, 'domain_changed': True, 'note': 'Final destination'},
+            ]
+        }
+    }
+    gen = ThreatReportGenerator('test_full_report.pdf')
+    gen.generate_report(test_data)
+    print('Report saved to test_full_report.pdf')

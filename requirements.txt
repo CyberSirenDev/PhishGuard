@@ -1,0 +1,8 @@
+Flask>=2.0
+scikit-learn>=1.3
+tldextract
+python-whois
+requests
+reportlab
+matplotlib
+numpy
