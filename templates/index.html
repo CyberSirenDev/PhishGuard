@@ -129,9 +129,42 @@
                 <!-- Screenshot -->
                 <div id="screenshotPanel" class="hidden">
                     <div class="divider"></div>
-                    <div class="section-label">urlscan.io Preview <span class="muted">(loads in ~35s)</span></div>
-                    <img id="screenshotImg" src="" alt="Safe screenshot" class="screenshot">
-                    <a id="screenshotLink" href="#" target="_blank" class="inline-link">View full report →</a>
+                    <div class="section-label ss-header">
+                        <span>urlscan.io Live Preview</span>
+                        <span class="ss-countdown-wrap">
+                            <span class="ss-spinner"></span>
+                            <span>Generating in <strong id="screenshotCountdown">35</strong>s</span>
+                        </span>
+                    </div>
+
+                    <!-- Loading skeleton shown while waiting -->
+                    <div id="screenshotSkeleton" class="ss-skeleton">
+                        <div class="ss-skeleton-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                                <line x1="8" y1="21" x2="16" y2="21"/>
+                                <line x1="12" y1="17" x2="12" y2="21"/>
+                            </svg>
+                        </div>
+                        <div class="ss-skeleton-text">
+                            <div class="ss-skeleton-bar" style="width:55%"></div>
+                            <div class="ss-skeleton-bar" style="width:35%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Actual screenshot image (hidden until loaded) -->
+                    <img id="screenshotImg" src="" alt="Site screenshot from urlscan.io" class="screenshot" style="display:none">
+
+                    <!-- Error fallback -->
+                    <div id="screenshotError" class="ss-error hidden">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        Screenshot not yet available — urlscan.io may need more time.
+                        <a id="screenshotFallbackLink" href="#" target="_blank" class="inline-link" style="margin-left:0.3rem">View full report →</a>
+                    </div>
+
+                    <a id="screenshotLink" href="#" target="_blank" class="inline-link ss-view-link">View full urlscan.io report →</a>
                 </div>
 
             </section>

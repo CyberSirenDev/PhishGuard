@@ -66,7 +66,34 @@ document.addEventListener('DOMContentLoaded', () => {
         lbl.textContent = 'Attach .eml';
         document.querySelector('#scanForm .upload-btn').classList.remove('has-file');
         resetRing();
+        resetScreenshot();
     });
+
+    function resetScreenshot() {
+        // Cancel any pending screenshot timer
+        if (window._screenshotTimer) {
+            clearTimeout(window._screenshotTimer);
+            window._screenshotTimer = null;
+        }
+        if (window._screenshotCountdown) {
+            clearInterval(window._screenshotCountdown);
+            window._screenshotCountdown = null;
+        }
+        // Reset screenshot panel to its default hidden state
+        document.getElementById('screenshotPanel').classList.add('hidden');
+        const img = document.getElementById('screenshotImg');
+        img.src = '';
+        img.classList.remove('ss-loaded');
+        img.style.display = 'none';
+        const skeleton = document.getElementById('screenshotSkeleton');
+        if (skeleton) skeleton.style.display = 'flex';
+        const countdown = document.getElementById('screenshotCountdown');
+        if (countdown) countdown.textContent = '35';
+        const errorBox = document.getElementById('screenshotError');
+        if (errorBox) errorBox.classList.add('hidden');
+        const countdownWrap = document.querySelector('.ss-countdown-wrap');
+        if (countdownWrap) countdownWrap.style.display = '';
+    }
 
     function setLoading(on) {
         btnText.textContent = on ? 'Analyzing…' : 'Analyze';
@@ -314,12 +341,66 @@ document.addEventListener('DOMContentLoaded', () => {
             grid.appendChild(card);
         });
 
-        // Screenshot
+        // Screenshot — polished load experience with countdown + skeleton
         const us = intel['urlscan'] || {};
         if (us.available && us.screenshot_url) {
             ssPanel.classList.remove('hidden');
-            setTimeout(() => { document.getElementById('screenshotImg').src = us.screenshot_url; }, 35000);
-            document.getElementById('screenshotLink').href = us.result_url || '#';
+
+            const img      = document.getElementById('screenshotImg');
+            const skeleton = document.getElementById('screenshotSkeleton');
+            const countEl  = document.getElementById('screenshotCountdown');
+            const errorBox = document.getElementById('screenshotError');
+            const link     = document.getElementById('screenshotLink');
+
+            // Reset to skeleton state
+            img.style.display  = 'none';
+            img.classList.remove('ss-loaded');
+            img.src            = '';
+            skeleton.style.display = 'flex';
+            errorBox.classList.add('hidden');
+            link.href = us.result_url || '#';
+
+            // Live countdown — tick every second
+            let secondsLeft = 35;
+            countEl.textContent = secondsLeft;
+            if (window._screenshotCountdown) clearInterval(window._screenshotCountdown);
+            window._screenshotCountdown = setInterval(() => {
+                secondsLeft = Math.max(0, secondsLeft - 1);
+                countEl.textContent = secondsLeft;
+                if (secondsLeft === 0) {
+                    clearInterval(window._screenshotCountdown);
+                    window._screenshotCountdown = null;
+                }
+            }, 1000);
+
+            // Also wire the fallback link inside the error box
+            const fallbackLink = document.getElementById('screenshotFallbackLink');
+            if (fallbackLink) fallbackLink.href = us.result_url || '#';
+
+            const countdownWrap = document.querySelector('.ss-countdown-wrap');
+
+            // Load image after 35s
+            if (window._screenshotTimer) clearTimeout(window._screenshotTimer);
+            window._screenshotTimer = setTimeout(() => {
+                const tempImg = new Image();
+                tempImg.onload = () => {
+                    skeleton.style.display = 'none';
+                    if (countdownWrap) countdownWrap.style.display = 'none';
+                    img.src = us.screenshot_url;
+                    img.style.display = 'block';
+                    requestAnimationFrame(() => img.classList.add('ss-loaded'));
+                    clearInterval(window._screenshotCountdown);
+                    window._screenshotCountdown = null;
+                };
+                tempImg.onerror = () => {
+                    skeleton.style.display = 'none';
+                    errorBox.classList.remove('hidden');
+                    if (countdownWrap) countdownWrap.style.display = 'none';
+                    clearInterval(window._screenshotCountdown);
+                    window._screenshotCountdown = null;
+                };
+                tempImg.src = us.screenshot_url;
+            }, 35000);
         } else {
             ssPanel.classList.add('hidden');
         }
