@@ -1045,3 +1045,120 @@ tbody tr:hover td {
     background: rgba(234, 179, 8, 0.1);
     color: var(--yellow);
 }
+
+/* ── Email Security Policy (SPF / DMARC) ──────────────────────────────────── */
+
+.eauth-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    overflow: hidden;
+}
+
+.eauth-card {
+    background: var(--surface);
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Card title row */
+.eauth-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.eauth-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-2);
+}
+
+/* Risk badge */
+.eauth-badge {
+    font-size: 0.63rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+}
+
+.eauth-high {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--red);
+}
+
+.eauth-medium {
+    background: rgba(234, 179, 8, 0.12);
+    color: var(--yellow);
+}
+
+.eauth-low {
+    background: rgba(34, 197, 94, 0.12);
+    color: var(--green);
+}
+
+/* Raw DNS record — monospace, truncated */
+.eauth-record {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.68rem;
+    color: var(--text-2);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    word-break: break-all;
+    line-height: 1.5;
+    max-height: 72px;
+    overflow-y: auto;
+}
+
+/* Risk label text */
+.eauth-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.eauth-label-low    { color: var(--green); }
+.eauth-label-medium { color: var(--yellow); }
+.eauth-label-high   { color: var(--red); }
+
+/* Metadata pills row */
+.eauth-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.1rem;
+}
+
+.eauth-pill {
+    font-size: 0.68rem;
+    color: var(--text-2);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.15rem 0.45rem;
+    white-space: nowrap;
+}
+
+.eauth-pill b {
+    color: var(--text-1);
+    font-weight: 600;
+}
+
+/* Responsive: stack to single column on mobile */
+@media (max-width: 600px) {
+    .eauth-grid {
+        grid-template-columns: 1fr;
+    }
+}

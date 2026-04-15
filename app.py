@@ -16,8 +16,13 @@ def index():
 @app.route('/analyze', methods=['POST'])
 def analyze():
     from analyzer.eml_parser import parse_eml
-    
-    # Check if request has files (multipart/form-data)
+    from models.risk_scorer import calculate_risk_score
+    from analyzer.threat_intel import run_threat_intel
+    from analyzer.dns_features import get_whois_details
+    from analyzer.ssl_features import extract_ssl_features
+    from analyzer.redirect_tracer import trace_redirects
+    from analyzer.spf_dmarc_checker import run_spf_dmarc_check
+    import tldextract, concurrent.futures
     eml_data = None
     email_text = ""
     url = ""
@@ -62,11 +67,12 @@ def analyze():
             ext = tldextract.extract(url)
             registered_domain = f"{ext.domain}.{ext.suffix}" if ext.domain else ""
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-                intel_future    = ex.submit(run_threat_intel, url)
-                whois_future    = ex.submit(get_whois_details, registered_domain) if registered_domain else None
-                ssl_future      = ex.submit(extract_ssl_features, url)
-                redirect_future = ex.submit(trace_redirects, url)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+                intel_future      = ex.submit(run_threat_intel, url)
+                whois_future      = ex.submit(get_whois_details, registered_domain) if registered_domain else None
+                ssl_future        = ex.submit(extract_ssl_features, url)
+                redirect_future   = ex.submit(trace_redirects, url)
+                spf_dmarc_future  = ex.submit(run_spf_dmarc_check, url)
 
                 intel = intel_future.result(timeout=20)
                 result['threat_intel'] = intel
@@ -79,6 +85,9 @@ def analyze():
 
                 if whois_future:
                     result['whois_data'] = whois_future.result(timeout=20)
+
+                spf_dmarc_data = spf_dmarc_future.result(timeout=12)
+                result['spf_dmarc_data'] = spf_dmarc_data
 
             # Bump risk score if Google or VT flag the URL
             gsb = intel.get("google_safe_browsing", {})
@@ -116,6 +125,26 @@ def analyze():
                 if redirect_data.get('domain_changed') and redirect_data.get('final_url') != url:
                     result['details'].append(
                         f"Final landing domain: {redirect_data['final_url']}")
+
+            # Apply SPF / DMARC policy penalties
+            if spf_dmarc_data and spf_dmarc_data.get('available'):
+                sd_penalty = spf_dmarc_data.get('total_penalty', 0)
+                if sd_penalty > 0:
+                    result['risk_score'] = min(100, result['risk_score'] + sd_penalty)
+                spf = spf_dmarc_data.get('spf', {})
+                dmarc = spf_dmarc_data.get('dmarc', {})
+                if not spf.get('exists'):
+                    result['details'].append(
+                        f"No SPF record found for {spf_dmarc_data['domain']} — domain has no sender validation policy.")
+                elif spf.get('risk') == 'high':
+                    result['details'].append(
+                        f"SPF policy for {spf_dmarc_data['domain']} is dangerously permissive ({spf.get('mechanism', '+all')}).")
+                if not dmarc.get('exists'):
+                    result['details'].append(
+                        f"No DMARC record found for {spf_dmarc_data['domain']} — domain has no email authentication policy.")
+                elif dmarc.get('policy') == 'none':
+                    result['details'].append(
+                        f"DMARC policy is 'none' for {spf_dmarc_data['domain']} — monitoring only, enforcement is disabled.")
 
             # Update final verdict flag after all adjustments
             result['is_phishing'] = int(result['risk_score'] >= 60)

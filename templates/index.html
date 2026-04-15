@@ -103,6 +103,31 @@
                     <div id="whoisBanner" class="whois-banner"></div>
                 </div>
 
+                <!-- Email Security Policy (SPF + DMARC) -->
+                <div id="spfDmarcPanel" class="hidden">
+                    <div class="divider"></div>
+                    <div class="section-label">Email Security Policy</div>
+                    <div class="eauth-grid">
+                        <div class="eauth-card" id="spfCard">
+                            <div class="eauth-header">
+                                <span class="eauth-title">SPF</span>
+                                <span id="spfBadge" class="eauth-badge">—</span>
+                            </div>
+                            <div id="spfRecord" class="eauth-record"></div>
+                            <div id="spfLabel" class="eauth-label"></div>
+                        </div>
+                        <div class="eauth-card" id="dmarcCard">
+                            <div class="eauth-header">
+                                <span class="eauth-title">DMARC</span>
+                                <span id="dmarcBadge" class="eauth-badge">—</span>
+                            </div>
+                            <div id="dmarcRecord" class="eauth-record"></div>
+                            <div id="dmarcLabel" class="eauth-label"></div>
+                            <div id="dmarcMeta" class="eauth-meta"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- SSL -->
                 <div id="sslPanel" class="hidden">
                     <div class="divider"></div>

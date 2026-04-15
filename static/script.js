@@ -172,6 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         renderWhois(data.whois_data);
+        renderSpfDmarc(data.spf_dmarc_data);
         renderSSL(data.ssl_data);
         renderRedirect(data.redirect_data);
         renderIntel(data.threat_intel);
@@ -189,6 +190,67 @@ document.addEventListener('DOMContentLoaded', () => {
             fill.style.strokeDashoffset = circ - (circ * cur / 100);
             if (cur >= target) clearInterval(timer);
         }, 18);
+    }
+
+    // ── SPF / DMARC Policy ────────────────────────────────────────────────────
+    function renderSpfDmarc(sd) {
+        const panel = document.getElementById('spfDmarcPanel');
+        if (!sd || !sd.available) { panel.classList.add('hidden'); return; }
+        panel.classList.remove('hidden');
+
+        // Risk → CSS class mapping
+        const riskClass = { low: 'eauth-low', medium: 'eauth-medium', high: 'eauth-high' };
+        const badgeLabel = { low: 'Secure', medium: 'Weak', high: 'Missing' };
+
+        // ── SPF ──
+        const spf = sd.spf || {};
+        document.getElementById('spfBadge').textContent = badgeLabel[spf.risk] || '?';
+        document.getElementById('spfBadge').className =
+            `eauth-badge ${riskClass[spf.risk] || 'eauth-high'}`;
+
+        const spfRecordEl = document.getElementById('spfRecord');
+        if (spf.record) {
+            spfRecordEl.textContent = spf.record;
+            spfRecordEl.style.display = 'block';
+        } else {
+            spfRecordEl.style.display = 'none';
+        }
+        document.getElementById('spfLabel').textContent = spf.risk_label || '';
+        document.getElementById('spfLabel').className =
+            `eauth-label eauth-label-${spf.risk || 'high'}`;
+
+        // ── DMARC ──
+        const dmarc = sd.dmarc || {};
+        document.getElementById('dmarcBadge').textContent = badgeLabel[dmarc.risk] || '?';
+        document.getElementById('dmarcBadge').className =
+            `eauth-badge ${riskClass[dmarc.risk] || 'eauth-high'}`;
+
+        const dmarcRecordEl = document.getElementById('dmarcRecord');
+        if (dmarc.record) {
+            dmarcRecordEl.textContent = dmarc.record;
+            dmarcRecordEl.style.display = 'block';
+        } else {
+            dmarcRecordEl.style.display = 'none';
+        }
+        document.getElementById('dmarcLabel').textContent = dmarc.risk_label || '';
+        document.getElementById('dmarcLabel').className =
+            `eauth-label eauth-label-${dmarc.risk || 'high'}`;
+
+        // DMARC metadata pills (policy, pct, reporting)
+        const metaEl = document.getElementById('dmarcMeta');
+        metaEl.innerHTML = '';
+        if (dmarc.policy) {
+            metaEl.innerHTML += `<span class="eauth-pill">Policy: <b>${dmarc.policy}</b></span>`;
+        }
+        if (dmarc.subdomain_policy) {
+            metaEl.innerHTML += `<span class="eauth-pill">Subdomain: <b>${dmarc.subdomain_policy}</b></span>`;
+        }
+        if (dmarc.pct !== null && dmarc.pct !== undefined) {
+            metaEl.innerHTML += `<span class="eauth-pill">Applied to: <b>${dmarc.pct}%</b> of mail</span>`;
+        }
+        if (dmarc.rua) {
+            metaEl.innerHTML += `<span class="eauth-pill">Reports → <b>${dmarc.rua}</b></span>`;
+        }
     }
 
     // ── WHOIS ─────────────────────────────────────────────────────────────────
